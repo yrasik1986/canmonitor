@@ -12,13 +12,14 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QStatusBar>
+#include <QGroupBox>
 
 class CANMonitor : public QMainWindow
 {
     Q_OBJECT
 
 public:
-    CANMonitor(QWidget *parent = nullptr);
+    explicit CANMonitor(QWidget *parent = nullptr);
     ~CANMonitor();
 
 private slots:
@@ -32,7 +33,7 @@ private:
     void setupUI();
     void appendMessage(const QString &msg, bool isError = false);
 
-    QCanBusDevice *canDevice = nullptr;
+    QCanBusDevice *canDevice;
 
     // UI Elements
     QComboBox *interfaceCombo;
