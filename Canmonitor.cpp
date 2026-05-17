@@ -1,19 +1,27 @@
-#include "Canmonitor.h"
+#include "canmonitor.h"
+#include "ui_canmonitor.h"
 #include <QMessageBox>
 #include <QDateTime>
-#include <QThread>
-#include <QGroupBox>
 #include <QTextCursor>
-#include <QFile>
 #include <QFile>
 #include <QTextStream>
-#include <QTextCursor>
-#include <QDateTime>
 
 CANMonitor::CANMonitor(QWidget *parent)
-    : QMainWindow(parent), canDevice(nullptr)
+    : QMainWindow(parent)
+    , ui(new Ui::CANTrafficMonitor)
+    , canDevice(nullptr)
 {
-    setupUI();
+    ui->setupUi(this);
+    setupInterfaces();
+
+    // Connect UI signals
+    connect(ui->connectBtn, &QPushButton::clicked, this, &CANMonitor::connectToCAN);
+    connect(ui->disconnectBtn, &QPushButton::clicked, this, &CANMonitor::disconnectFromCAN);
+    connect(ui->sendBtn, &QPushButton::clicked, this, &CANMonitor::sendFrame);
+    connect(ui->clearLogBtn, &QPushButton::clicked, this, &CANMonitor::clearLog);
+
+    setWindowTitle("CAN Bus Monitor");
+    statusBar()->showMessage("Ready - Not connected");
 }
 
 CANMonitor::~CANMonitor()
@@ -22,115 +30,38 @@ CANMonitor::~CANMonitor()
         canDevice->disconnectDevice();
     }
     delete canDevice;
+    delete ui;
 }
 
-void CANMonitor::setupUI()
+void CANMonitor::setupInterfaces()
 {
-    setWindowTitle("CAN Monitor");
-    setMinimumSize(800, 600);
-
-    // Central widget
-    QWidget *centralWidget = new QWidget(this);
-    setCentralWidget(centralWidget);
-
-    QVBoxLayout *mainLayout = new QVBoxLayout(centralWidget);
-
-    // === Connection panel ===
-    QGroupBox *connGroup = new QGroupBox("Connection");
-    QHBoxLayout *connLayout = new QHBoxLayout();
-    connGroup->setLayout(connLayout);
-
-    QLabel *interfaceLabel = new QLabel("Interface:");
-    interfaceCombo = new QComboBox();
-
 #ifdef Q_OS_LINUX
-    interfaceCombo->addItem("can0");
-    interfaceCombo->addItem("can1");
-    interfaceCombo->setCurrentText("can0");
+    ui->interfaceCombo->addItem("can0");
+    ui->interfaceCombo->addItem("can1");
+    ui->interfaceCombo->addItem("vcan0");
+    ui->interfaceCombo->setCurrentText("can0");
 #elif defined(Q_OS_MAC)
-    interfaceCombo->addItem("usb0");
-    interfaceCombo->addItem("usb1");
-    interfaceCombo->setCurrentText("usb0");
+    ui->interfaceCombo->addItem("usb0");
+    ui->interfaceCombo->addItem("usb1");
+    ui->interfaceCombo->setCurrentText("usb0");
+#elif defined(Q_OS_WIN)
+    ui->interfaceCombo->addItem("can0");
+    ui->interfaceCombo->addItem("can1");
+    ui->interfaceCombo->setCurrentText("can0");
 #else
-    interfaceCombo->addItem("can0");
-    interfaceCombo->setCurrentText("can0");
+    ui->interfaceCombo->addItem("can0");
+    ui->interfaceCombo->setCurrentText("can0");
 #endif
-    interfaceCombo->setEditable(true);
-
-    QLabel *bitrateLabel = new QLabel("Bitrate (bps):");
-    bitrateEdit = new QLineEdit("500000");
-
-    connectBtn = new QPushButton("Connect");
-    disconnectBtn = new QPushButton("Disconnect");
-    disconnectBtn->setEnabled(false);
-
-    connLayout->addWidget(interfaceLabel);
-    connLayout->addWidget(interfaceCombo);
-    connLayout->addWidget(bitrateLabel);
-    connLayout->addWidget(bitrateEdit);
-    connLayout->addWidget(connectBtn);
-    connLayout->addWidget(disconnectBtn);
-    connLayout->addStretch();
-
-    mainLayout->addWidget(connGroup);
-
-    // === Send panel ===
-    QGroupBox *sendGroup = new QGroupBox("Send CAN Frame");
-    QHBoxLayout *sendLayout = new QHBoxLayout();
-    sendGroup->setLayout(sendLayout);
-
-    QLabel *idLabel = new QLabel("CAN ID (hex):");
-    sendIdEdit = new QLineEdit("123");
-    sendIdEdit->setFixedWidth(80);
-
-    QLabel *dataLabel = new QLabel("Data (hex bytes):");
-    sendDataEdit = new QLineEdit("01 02 03 04");
-    sendDataEdit->setMinimumWidth(250);
-
-    sendBtn = new QPushButton("Send");
-    sendBtn->setEnabled(false);
-
-    sendLayout->addWidget(idLabel);
-    sendLayout->addWidget(sendIdEdit);
-    sendLayout->addWidget(dataLabel);
-    sendLayout->addWidget(sendDataEdit);
-    sendLayout->addWidget(sendBtn);
-    sendLayout->addStretch();
-
-    mainLayout->addWidget(sendGroup);
-
-    // === Log area ===
-    QGroupBox *logGroup = new QGroupBox("CAN Traffic");
-    QVBoxLayout *logLayout = new QVBoxLayout();
-    logGroup->setLayout(logLayout);
-
-    logArea = new QTextEdit();
-    logArea->setReadOnly(true);
-    logArea->setFont(QFont("Monospace", 9));
-
-    logLayout->addWidget(logArea);
-
-    mainLayout->addWidget(logGroup);
-
-    // === Status bar ===
-    statusBar = new QStatusBar(this);
-    setStatusBar(statusBar);
-    statusBar->showMessage("Not connected");
-
-    // === Connect signals ===
-    connect(connectBtn, &QPushButton::clicked, this, &CANMonitor::connectToCAN);
-    connect(disconnectBtn, &QPushButton::clicked, this, &CANMonitor::disconnectFromCAN);
-    connect(sendBtn, &QPushButton::clicked, this, &CANMonitor::sendFrame);
 }
 
 void CANMonitor::connectToCAN()
 {
-    QString interfaceName = interfaceCombo->currentText();
+    QString interfaceName = ui->interfaceCombo->currentText();
     bool ok;
-    int bitrate = bitrateEdit->text().toInt(&ok);
+    int bitrate = ui->bitrateEdit->text().toInt(&ok);
 
     if (!ok || bitrate <= 0) {
-        appendMessage("ERROR: Invalid bitrate", true);
+        appendMessage("ERROR: Invalid bitrate value", true);
         return;
     }
 
@@ -143,7 +74,7 @@ void CANMonitor::connectToCAN()
 #elif defined(Q_OS_MAC)
     pluginName = "peakcan";
     errorMsg = "PEAK CAN";
-#else
+#elif defined(Q_OS_WIN)
     pluginName = "socketcan";
     errorMsg = "SocketCAN";
 #endif
@@ -183,48 +114,51 @@ void CANMonitor::connectToCAN()
 
     // Success
     appendMessage(QString("Connected to %1 at %2 bps").arg(interfaceName).arg(bitrate));
-    connectBtn->setEnabled(false);
-    disconnectBtn->setEnabled(true);
-    sendBtn->setEnabled(true);
-    statusBar->showMessage(QString("Connected to %1").arg(interfaceName));
+    ui->connectBtn->setEnabled(false);
+    ui->disconnectBtn->setEnabled(true);
+    ui->sendBtn->setEnabled(true);
+    statusBar()->showMessage(QString("Connected to %1 at %2 bps").arg(interfaceName).arg(bitrate));
 }
 
 void CANMonitor::disconnectFromCAN()
 {
     if (canDevice && canDevice->state() == QCanBusDevice::ConnectedState) {
         canDevice->disconnectDevice();
-        appendMessage("Disconnected");
+        appendMessage("Disconnected from CAN bus");
     }
 
     delete canDevice;
     canDevice = nullptr;
 
-    connectBtn->setEnabled(true);
-    disconnectBtn->setEnabled(false);
-    sendBtn->setEnabled(false);
-    statusBar->showMessage("Disconnected");
+    ui->connectBtn->setEnabled(true);
+    ui->disconnectBtn->setEnabled(false);
+    ui->sendBtn->setEnabled(false);
+    statusBar()->showMessage("Disconnected");
 }
 
 void CANMonitor::sendFrame()
 {
     if (!canDevice || canDevice->state() != QCanBusDevice::ConnectedState) {
-        appendMessage("ERROR: Not connected", true);
+        appendMessage("ERROR: Not connected to CAN bus", true);
         return;
     }
 
     // Parse CAN ID
     bool ok;
-    uint id = sendIdEdit->text().toUInt(&ok, 16);
+    uint id = ui->sendIdEdit->text().toUInt(&ok, 16);
     if (!ok) {
-        appendMessage("ERROR: Invalid CAN ID format (use hex, e.g., 123)", true);
+        appendMessage("ERROR: Invalid CAN ID format (use hex, e.g., 123 or 7FF)", true);
         return;
     }
 
+    if (id > 0x7FF) {
+        appendMessage("WARNING: ID > 0x7FF will be sent as 29-bit extended frame");
+    }
+
     // Parse data bytes
-    QString dataStr = sendDataEdit->text();
+    QString dataStr = ui->sendDataEdit->text();
     QStringList byteStrings;
 
-    // Работает и в Qt 5, и в Qt 6
 #if QT_VERSION >= 0x060000
     byteStrings = dataStr.split(' ', Qt::SkipEmptyParts);
 #else
@@ -237,26 +171,35 @@ void CANMonitor::sendFrame()
         bool byteOk;
         uchar byte = static_cast<uchar>(byteStr.toUInt(&byteOk, 16));
         if (!byteOk) {
-            appendMessage(QString("ERROR: Invalid data byte format '%1' (use hex, e.g., 01 02)").arg(byteStr), true);
+            appendMessage(QString("ERROR: Invalid data byte format '%1' (use hex, e.g., 01 02 03)").arg(byteStr), true);
             return;
         }
         data.append(byte);
     }
 
     if (data.size() > 8) {
-        appendMessage("ERROR: CAN frame supports max 8 bytes of data", true);
+        appendMessage("ERROR: CAN frame supports maximum 8 bytes of data", true);
         return;
     }
 
     // Create and send frame
-    QCanBusFrame frame(id, data);
-    frame.setExtendedFrameFormat(false);
+    QCanBusFrame frame;
+    if (id > 0x7FF) {
+        frame.setExtendedFrameFormat(true);
+    }
+    frame.setFrameId(id);
+    frame.setPayload(data);
 
     if (!canDevice->writeFrame(frame)) {
         appendMessage(QString("ERROR: Failed to send frame - %1").arg(canDevice->errorString()), true);
     } else {
-        QString hexData = data.toHex(' ').toUpper();
-        appendMessage(QString("[TX] ID: 0x%1  Data: %2").arg(id, 0, 16).arg(hexData));
+        QString hexData = data.isEmpty() ? "(RTR)" : data.toHex(' ').toUpper();
+        QString idFormat = (id > 0x7FF) ? "0x%1 (29-bit)" : "0x%1";
+        appendMessage(QString("[TX] ID: %2  DLC: %3  Data: %4")
+                          .arg(id, 0, 16)
+                          .arg(idFormat.arg(id, 0, 16))
+                          .arg(data.size())
+                          .arg(hexData));
     }
 }
 
@@ -276,20 +219,30 @@ void CANMonitor::framesReceived()
 
         QByteArray data = frame.payload();
         QString dataStr;
-        if (data.isEmpty()) {
+        if (frame.frameType() == QCanBusFrame::RemoteRequestFrame) {
             dataStr = "(RTR frame)";
+        } else if (data.isEmpty()) {
+            dataStr = "(Empty)";
         } else {
             dataStr = data.toHex(' ').toUpper();
         }
 
+        QString frameType = "";
         if (frame.frameType() == QCanBusFrame::ErrorFrame) {
-            appendMessage(QString("[ERR] %1 - Error frame").arg(timestamp), true);
+            frameType = " [ERROR]";
+            appendMessage(QString("[RX] %1  ID: %2  DLC: %3  Data: %4%5")
+                              .arg(timestamp)
+                              .arg(idStr)
+                              .arg(data.size())
+                              .arg(dataStr)
+                              .arg(frameType), true);
         } else {
-            appendMessage(QString("[RX] %1  ID: %2  [%3] %4")
-                          .arg(timestamp)
-                          .arg(idStr)
-                          .arg(data.size())
-                          .arg(dataStr));
+            appendMessage(QString("[RX] %1  ID: %2  DLC: %3  Data: %4%5")
+                              .arg(timestamp)
+                              .arg(idStr)
+                              .arg(data.size())
+                              .arg(dataStr)
+                              .arg(frameType));
         }
     }
 }
@@ -304,28 +257,34 @@ void CANMonitor::errorOccurred(QCanBusDevice::CanBusError error)
     }
 }
 
+void CANMonitor::clearLog()
+{
+    ui->logArea->clear();
+    appendMessage("Log cleared");
+}
+
+void CANMonitor::updateConnectionStatus()
+{
+    if (canDevice && canDevice->state() == QCanBusDevice::ConnectedState) {
+        statusBar()->showMessage("Connected to CAN bus");
+    } else {
+        statusBar()->showMessage("Disconnected");
+    }
+}
+
 void CANMonitor::appendMessage(const QString &msg, bool isError)
 {
-    // Время с миллисекундами
     QString timestamp = QDateTime::currentDateTime().toString("hh:mm:ss.zzz");
     QString formattedMsg = QString("[%1] %2").arg(timestamp).arg(msg);
 
-    // Вывод в лог-поле (цвет для ошибок)
     if (isError) {
-        logArea->append(QString("<font color='red'>%1</font>").arg(formattedMsg.toHtmlEscaped()));
+        ui->logArea->append(QString("<font color='#FF0000'>%1</font>").arg(formattedMsg.toHtmlEscaped()));
     } else {
-        logArea->append(formattedMsg);
+        ui->logArea->append(formattedMsg);
     }
 
-    // Автопрокрутка вниз
-    logArea->moveCursor(QTextCursor::End);
-
-    // // Логирование в файл (Qt6-style)
-    // QFile logFile("can_log.txt");
-    // if (logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text))
-    // {
-    //     QTextStream out(&logFile);
-    //     out << formattedMsg << "\n";
-    //     logFile.close();
-    // }
+    // Auto-scroll if enabled
+    if (ui->autoScrollCheck->isChecked()) {
+        ui->logArea->moveCursor(QTextCursor::End);
+    }
 }

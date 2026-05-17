@@ -13,6 +13,11 @@
 #include <QHBoxLayout>
 #include <QStatusBar>
 #include <QGroupBox>
+#include <QCheckBox>
+
+QT_BEGIN_NAMESPACE
+namespace Ui { class CANTrafficMonitor; }
+QT_END_NAMESPACE
 
 class CANMonitor : public QMainWindow
 {
@@ -28,23 +33,15 @@ private slots:
     void sendFrame();
     void framesReceived();
     void errorOccurred(QCanBusDevice::CanBusError error);
+    void clearLog();
+    void updateConnectionStatus();
 
 private:
-    void setupUI();
+    void setupInterfaces();
     void appendMessage(const QString &msg, bool isError = false);
 
+    Ui::CANTrafficMonitor *ui;
     QCanBusDevice *canDevice;
-
-    // UI Elements
-    QComboBox *interfaceCombo;
-    QLineEdit *bitrateEdit;
-    QPushButton *connectBtn;
-    QPushButton *disconnectBtn;
-    QPushButton *sendBtn;
-    QLineEdit *sendIdEdit;
-    QLineEdit *sendDataEdit;
-    QTextEdit *logArea;
-    QStatusBar *statusBar;
 };
 
 #endif // CANMONITOR_H
