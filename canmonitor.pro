@@ -1,4 +1,4 @@
-QT += core widgets serialbus
+QT += core widgets serialbus charts
 
 TARGET = canmonitor
 TEMPLATE = app
@@ -7,13 +7,16 @@ CONFIG += c++17
 # Use Qt's UI compiler
 FORMS += canmonitor.ui
 
-
 SOURCES += \
     main.cpp \
-    canmonitor.cpp
+    canmonitor.cpp \
+    dbc_parser.cpp \
+    canchartwidget.cpp
 
 HEADERS += \
-    canmonitor.h
+    canmonitor.h \
+    dbc_parser.h \
+    canchartwidget.h
 
 # Platform-specific settings
 macx {
@@ -29,6 +32,5 @@ linux {
 }
 
 win32 {
-    # Windows-specific settings if needed
     LIBS += -lws2_32
 }
